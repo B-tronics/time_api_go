@@ -9,31 +9,67 @@ import (
 	"time"
 )
 
-var timeStamp time.Time
-
 const (
-	contextRoot    = "localhost:8080"
-	timeFormat     = time.RFC3339
-	contentType    = "text/plain"
-	errorInvalidCT = "Invalid Content-Type, expected text/plain"
-	errorReadBody  = "Failed to read request body"
-	errorTimeParse = "Wrong time format"
+	contextRoot       = "localhost:8080"
+	timeFormat        = time.TimeOnly
+	contentType       = "text/plain"
+	errorInvalidCT    = "Invalid Content-Type, expected text/plain"
+	errorReadBody     = "Failed to read request body"
+	errorTimeParse    = "Wrong time format"
+	errorNotSupported = "Not supported method"
 )
+
+type TimeStampManager struct {
+	updateCh chan time.Time
+	readCh   chan chan time.Time
+}
+
+func NewTimeStampManager() *TimeStampManager {
+	tsm := &TimeStampManager{
+		updateCh: make(chan time.Time),
+		readCh:   make(chan chan time.Time),
+	}
+	go tsm.run()
+	return tsm
+}
+
+func (tsm *TimeStampManager) run() {
+	var currentTime time.Time
+	for {
+		select {
+		case newTime := <-tsm.updateCh:
+			currentTime = newTime
+		case replyCh := <-tsm.readCh:
+			replyCh <- currentTime
+		}
+	}
+}
+
+func (tsm *TimeStampManager) UpdateTimeStamp(newTime time.Time) {
+	tsm.updateCh <- newTime
+}
+
+func (tsm *TimeStampManager) GetTimeStamp() time.Time {
+	replyCh := make(chan time.Time)
+	tsm.readCh <- replyCh
+	return <-replyCh
+}
 
 func errorResponse(writer http.ResponseWriter, message string, status int) {
 	http.Error(writer, message, status)
 }
 
-func handleRootGET(writer http.ResponseWriter, request *http.Request) {
+func handleRootGET(writer http.ResponseWriter, request *http.Request, tsm *TimeStampManager) {
 	if request.Header.Get("Content-Type") != contentType {
 		errorResponse(writer, errorInvalidCT, http.StatusBadRequest)
 		return
 	}
 	writer.Header().Set("Content-Type", contentType)
-	_, _ = writer.Write([]byte(timeStamp.Format(timeFormat)))
+	currentTime := tsm.GetTimeStamp()
+	_, _ = writer.Write([]byte(currentTime.Format(timeFormat)))
 }
 
-func handleRootPOST(writer http.ResponseWriter, request *http.Request) {
+func handleRootPOST(writer http.ResponseWriter, request *http.Request, tsm *TimeStampManager) {
 	if request.Header.Get("Content-Type") != contentType {
 		errorResponse(writer, errorInvalidCT, http.StatusBadRequest)
 		return
@@ -45,18 +81,26 @@ func handleRootPOST(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	timeStamp, err = time.Parse(timeFormat, string(body))
+	newTime, err := time.Parse(timeFormat, string(body))
 	if err != nil {
 		errorResponse(writer, errorTimeParse, http.StatusBadRequest)
 		return
 	}
+
+	tsm.UpdateTimeStamp(newTime)
 }
 
-func runServer() {
+func runServer(tsm *TimeStampManager) {
 	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /", handleRootGET)
-	mux.HandleFunc("POST /", handleRootPOST)
+	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			handleRootGET(writer, request, tsm)
+		} else if request.Method == http.MethodPost {
+			handleRootPOST(writer, request, tsm)
+		} else {
+			errorResponse(writer, errorNotSupported, http.StatusBadRequest)
+		}
+	})
 
 	if err := http.ListenAndServe(contextRoot, mux); err != nil {
 		log.Fatal(err.Error())
@@ -109,7 +153,7 @@ func getTimeStamp() {
 }
 
 func main() {
-	go runServer()
+	go runServer(NewTimeStampManager())
 
 	postTimeStamp()
 
