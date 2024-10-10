@@ -9,34 +9,45 @@ import (
 	"time"
 )
 
-var contextRoot = "localhost:8080"
 var timeStamp time.Time
-var timeFormat = time.RFC3339
+
+const (
+	contextRoot    = "localhost:8080"
+	timeFormat     = time.RFC3339
+	contentType    = "text/plain"
+	errorInvalidCT = "Invalid Content-Type, expected text/plain"
+	errorReadBody  = "Failed to read request body"
+	errorTimeParse = "Wrong time format"
+)
+
+func errorResponse(writer http.ResponseWriter, message string, status int) {
+	http.Error(writer, message, status)
+}
 
 func handleRootGET(writer http.ResponseWriter, request *http.Request) {
-	if request.Header.Get("Content-Type") != "text/plain" {
-		http.Error(writer, "Invalid Content-Type, expected text/plain", http.StatusBadRequest)
+	if request.Header.Get("Content-Type") != contentType {
+		errorResponse(writer, errorInvalidCT, http.StatusBadRequest)
 		return
 	}
-	writer.Header().Set("Content-Type", "text/plain")
+	writer.Header().Set("Content-Type", contentType)
 	_, _ = writer.Write([]byte(timeStamp.Format(timeFormat)))
 }
 
 func handleRootPOST(writer http.ResponseWriter, request *http.Request) {
-	if request.Header.Get("Content-Type") != "text/plain" {
-		http.Error(writer, "Invalid Content-Type, expected text/plain", http.StatusBadRequest)
+	if request.Header.Get("Content-Type") != contentType {
+		errorResponse(writer, errorInvalidCT, http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
-		http.Error(writer, "Failed to read request body", http.StatusBadRequest)
+		errorResponse(writer, errorReadBody, http.StatusBadRequest)
 		return
 	}
 
 	timeStamp, err = time.Parse(timeFormat, string(body))
 	if err != nil {
-		http.Error(writer, "Wrong time format", http.StatusBadRequest)
+		errorResponse(writer, errorTimeParse, http.StatusBadRequest)
 		return
 	}
 }
@@ -59,9 +70,8 @@ func postTimeStamp() {
 		log.Fatalf("Error creating POST request: %v", err)
 	}
 
-	req.Header.Set("Content-Type", "text/plain")
-	client := http.Client{}
-	resp, err := client.Do(req)
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatalf("Error sending POST request: %v", err)
 	}
@@ -69,29 +79,29 @@ func postTimeStamp() {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("Failed to send POST request. Status: %d\n", resp.StatusCode)
+		log.Fatalf("POST request returned an error. Status: %d\n", resp.StatusCode)
 	}
 }
 
 func getTimeStamp() {
 	req, err := http.NewRequest("GET", "http://localhost:8080/", nil)
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Fatalf("Error creating GET request: %v", err)
 		return
 	}
 
-	req.Header.Set("Content-Type", "text/plain")
-
-	response, err := http.DefaultClient.Do(req)
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println("Error making GET request:", err)
+		log.Fatalf("Error sending GET request: %v", err)
 		return
 	}
-	defer response.Body.Close()
 
-	body, err := io.ReadAll(response.Body)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response body:", err)
+		log.Fatalf("GET request returned an error. Status: %d\n", resp.StatusCode)
 		return
 	}
 
