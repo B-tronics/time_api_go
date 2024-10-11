@@ -29,12 +29,12 @@ func NewTimeStampManager() *TimeStampManager {
 		updateCh: make(chan time.Time),
 		readCh:   make(chan chan time.Time),
 	}
-	go tsm.run()
+	go tsm.run(time.Now())
 	return tsm
 }
 
-func (tsm *TimeStampManager) run() {
-	var currentTime time.Time
+func (tsm *TimeStampManager) run(initialTime time.Time) {
+	currentTime := initialTime
 	for {
 		select {
 		case newTime := <-tsm.updateCh:
@@ -66,7 +66,11 @@ func handleRootGET(writer http.ResponseWriter, request *http.Request, tsm *TimeS
 	}
 	writer.Header().Set("Content-Type", contentType)
 	currentTime := tsm.GetTimeStamp()
-	_, _ = writer.Write([]byte(currentTime.Format(timeFormat)))
+
+	_, err := writer.Write([]byte(currentTime.Format(timeFormat)))
+	if err != nil {
+		log.Fatalf("Error writing response, %v", err)
+	}
 }
 
 func handleRootPOST(writer http.ResponseWriter, request *http.Request, tsm *TimeStampManager) {
@@ -128,7 +132,7 @@ func postTimeStamp() {
 }
 
 func getTimeStamp() {
-	req, err := http.NewRequest("GET", "http://localhost:8080/", nil)
+	req, err := http.NewRequest("GET", "http://"+contextRoot, nil)
 	if err != nil {
 		log.Fatalf("Error creating GET request: %v", err)
 		return

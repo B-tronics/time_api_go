@@ -27,6 +27,7 @@ the timestamp which it has read in the second step.*
 main_test.go). The result must run by executing go run main.go command.*
 
 - *Test coverage needs to reach at least 2%, maximum allowed coverage is 100%.*
+    - coverage: 51.4% of statements
 
 
 # Prerequisites
