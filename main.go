@@ -13,6 +13,7 @@ const (
 	contextRoot       = "localhost:8080"
 	timeFormat        = time.TimeOnly
 	contentType       = "text/plain"
+	maxBodySize       = 1024
 	errorInvalidCT    = "Invalid Content-Type, expected text/plain"
 	errorReadBody     = "Failed to read request body"
 	errorTimeParse    = "Wrong time format"
@@ -79,6 +80,7 @@ func handleRootPOST(writer http.ResponseWriter, request *http.Request, tsm *Time
 		return
 	}
 
+	request.Body = http.MaxBytesReader(writer, request.Body, maxBodySize)
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		errorResponse(writer, errorReadBody, http.StatusBadRequest)
@@ -92,6 +94,7 @@ func handleRootPOST(writer http.ResponseWriter, request *http.Request, tsm *Time
 	}
 
 	tsm.UpdateTimeStamp(newTime)
+	writer.WriteHeader(http.StatusOK)
 }
 
 func runServer(tsm *TimeStampManager) {
