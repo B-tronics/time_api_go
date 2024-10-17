@@ -118,9 +118,11 @@ func TestHandleRootPOSTInvalidTimeFormat(t *testing.T) {
 
 func TestServerIntegration(t *testing.T) {
 	tsm := NewTimeStampManager()
-	go runServer(tsm)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go runServer(tsm, &wg)
 
-	time.Sleep(100 * time.Millisecond) // Allow server to start
+	wg.Wait()
 
 	// Test POST
 	newTime := time.Now().Format(timeFormat)

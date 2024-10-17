@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -97,7 +98,7 @@ func handleRootPOST(writer http.ResponseWriter, request *http.Request, tsm *Time
 	writer.WriteHeader(http.StatusOK)
 }
 
-func runServer(tsm *TimeStampManager) {
+func runServer(tsm *TimeStampManager, wg *sync.WaitGroup) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
@@ -109,9 +110,13 @@ func runServer(tsm *TimeStampManager) {
 		}
 	})
 
-	if err := http.ListenAndServe(contextRoot, mux); err != nil {
-		log.Fatal(err.Error())
-	}
+	go func() {
+		if err := http.ListenAndServe(contextRoot, mux); err != nil {
+			log.Fatal(err.Error())
+		}
+	}()
+
+	wg.Done()
 }
 
 func postTimeStamp() {
@@ -160,8 +165,12 @@ func getTimeStamp() {
 }
 
 func main() {
-	go runServer(NewTimeStampManager())
+	var wg sync.WaitGroup
 
+	wg.Add(1)
+	go runServer(NewTimeStampManager(), &wg)
+
+	wg.Wait()
 	postTimeStamp()
 
 	getTimeStamp()
